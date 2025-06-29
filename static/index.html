@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gestor de Tarefas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans text-gray-900">
+  <div class="max-w-6xl mx-auto p-6">
+    <h1 class="text-4xl font-semibold mb-8 text-center">📋 Tarefas e Tags</h1>
+    
+    <div id="message" class="text-center text-sm mb-4"></div>
+
+    <div class="grid md:grid-cols-2 gap-6">
+      <!-- TAGS -->
+      <div class="bg-white p-6 rounded-2xl shadow">
+        <h2 class="text-xl font-medium mb-4">Tags</h2>
+        <div id="tagList" class="space-y-2 mb-4"></div>
+        <input id="tagName" type="text" placeholder="Nova tag" class="w-full border rounded px-3 py-2 mb-2"/>
+        <button onclick="createTag()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Adicionar Tag</button>
+      </div>
+
+      <!-- TASKS -->
+      <div class="bg-white p-6 rounded-2xl shadow">
+        <h2 class="text-xl font-medium mb-4" id="taskFormTitle">Nova Tarefa</h2>
+        <input id="taskName" type="text" placeholder="Nome" class="w-full border rounded px-3 py-2 mb-2"/>
+        <textarea id="taskDesc" placeholder="Descrição" class="w-full border rounded px-3 py-2 mb-2"></textarea>
+        <input id="taskTag" type="text" placeholder="Tag (opcional)" class="w-full border rounded px-3 py-2 mb-4"/>
+        <button id="taskSubmitBtn" onclick="submitTask()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">Criar Tarefa</button>
+      </div>
+    </div>
+
+    <!-- LISTAGEM -->
+    <div class="mt-10 bg-white p-6 rounded-2xl shadow">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-medium">Tarefas</h2>
+        <div class="space-x-2">
+          <button onclick="loadTasks()" class="bg-gray-200 text-sm px-4 py-1 rounded hover:bg-gray-300">🔄 Atualizar</button>
+          <button onclick="loadTasks()" class="bg-gray-200 text-sm px-4 py-1 rounded hover:bg-gray-300">🔍 Limpar Filtro</button>
+        </div>
+      </div>
+      <div id="taskDisplay" class="space-y-4"></div>
+    </div>
+  </div>
+
+  <script>
+    let editingTaskId = null;
+
+    const showMessage = (msg, success = true) => {
+      const el = document.getElementById("message");
+      el.className = `text-center text-sm mb-4 ${success ? 'text-green-600' : 'text-red-600'}`;
+      el.innerText = msg;
+      setTimeout(() => el.innerText = '', 4000);
+    };
+
+    const resetTaskForm = () => {
+      document.getElementById('taskName').value = '';
+      document.getElementById('taskDesc').value = '';
+      document.getElementById('taskTag').value = '';
+      document.getElementById('taskSubmitBtn').innerText = 'Criar Tarefa';
+      document.getElementById('taskSubmitBtn').className = 'w-full bg-green-600 text-white py-2 rounded hover:bg-green-700';
+      document.getElementById('taskFormTitle').innerText = 'Nova Tarefa';
+      editingTaskId = null;
+    };
+
+    async function submitTask() {
+      const nome = document.getElementById('taskName').value;
+      const descricao = document.getElementById('taskDesc').value;
+      const tag = document.getElementById('taskTag').value;
+
+      if (!nome || !descricao) return showMessage('Preencha os campos.', false);
+
+      const payload = { nome, descricao, tag: { nome: tag || "" } };
+
+      let res;
+      if (editingTaskId) {
+        res = await fetch(`/task/${editingTaskId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        res = await fetch('/task', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (res.ok) {
+        showMessage(editingTaskId ? "Tarefa atualizada!" : "Tarefa criada!");
+        resetTaskForm();
+        await loadTags();
+        await loadTasks();
+      } else {
+        const err = await res.json();
+        showMessage(err.message || "Erro ao salvar tarefa.", false);
+      }
+    }
+
+    async function createTag() {
+      const name = document.getElementById('tagName').value;
+      if (!name) return showMessage('Digite o nome da tag.', false);
+      const res = await fetch('/tag', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: name })
+      });
+      if (res.ok) {
+        showMessage('Tag criada!');
+        document.getElementById('tagName').value = '';
+        loadTags();
+      } else {
+        const err = await res.json();
+        showMessage(err.message || 'Erro ao criar tag.', false);
+      }
+    }
+
+    async function updateTag(id) {
+      const newName = prompt("Novo nome da tag:");
+      if (!newName) return;
+      const res = await fetch(`/tag/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: newName })
+      });
+      if (res.ok) {
+        showMessage('Tag atualizada!');
+        loadTags();
+        loadTasks();
+      } else {
+        const err = await res.json();
+        showMessage(err.message || 'Erro ao atualizar tag.', false);
+      }
+    }
+
+    async function deleteTag(id) {
+    if (!confirm("Excluir essa tag?")) return;
+
+    const res = await fetch(`/tag/${id}`, { method: 'DELETE' });
+
+    if (res.ok) {
+        showMessage('Tag removida!');
+        loadTags();
+        loadTasks();
+    } else {
+        try {
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+            const err = await res.json();
+            showMessage(err.message || 'Erro ao remover tag.', false);
+        } else {
+            const errText = await res.text();
+            showMessage(errText || 'Erro ao remover tag.', false);
+        }
+        } catch (e) {
+        showMessage('Erro inesperado ao remover tag.', false);
+        }
+    }
+    }
+
+
+    async function deleteTask(id) {
+      if (!confirm("Excluir esta tarefa?")) return;
+      const res = await fetch(`/task/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        showMessage('Tarefa excluída!');
+        loadTasks();
+      } else {
+        const err = await res.json();
+        showMessage(err.message || 'Erro ao excluir tarefa.', false);
+      }
+    }
+
+    async function filterByTag(tag) {
+      const res = await fetch(`/task/tag/${tag}`);
+      const tasks = await res.json();
+      renderTasks(tasks);
+    }
+
+    async function loadTags() {
+      const res = await fetch('/tag');
+      const tags = await res.json();
+      const container = document.getElementById('tagList');
+      container.innerHTML = '';
+      tags.forEach(t => {
+        container.innerHTML += `
+          <div class="flex justify-between items-center border rounded px-3 py-2">
+            <span class="cursor-pointer text-blue-600" onclick="filterByTag('${t.nome}')">${t.nome}</span>
+            <div class="space-x-2 text-sm">
+              <button onclick="updateTag(${t.id})" class="text-blue-500">✏️</button>
+              <button onclick="deleteTag(${t.id})" class="text-red-500">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    async function loadTasks() {
+      const res = await fetch('/task');
+      const data = await res.json();
+      renderTasks(data.tasks);
+    }
+
+    function editTask(id, nome, descricao, tag) {
+      document.getElementById('taskName').value = nome;
+      document.getElementById('taskDesc').value = descricao;
+      document.getElementById('taskTag').value = tag;
+
+      document.getElementById('taskSubmitBtn').innerText = 'Atualizar Tarefa';
+      document.getElementById('taskSubmitBtn').className = 'w-full bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600';
+      document.getElementById('taskFormTitle').innerText = 'Editar Tarefa';
+      editingTaskId = id;
+    }
+
+    function renderTasks(taskList) {
+      const container = document.getElementById('taskDisplay');
+      container.innerHTML = '';
+      taskList.forEach(task => {
+        container.innerHTML += `
+          <div class="bg-gray-50 p-4 rounded-lg border relative">
+            <h3 class="text-lg font-semibold">${task.nome}</h3>
+            <p class="text-sm text-gray-700">${task.descricao}</p>
+            <div class="mt-2 text-xs">
+              <span class="bg-blue-200 text-blue-800 px-2 py-1 rounded cursor-pointer" onclick="filterByTag('${task.tag.nome}')">${task.tag.nome || 'Sem Tag'}</span>
+            </div>
+            <div class="absolute top-2 right-2 flex gap-2 text-sm">
+              <button onclick="editTask(${task.id}, \`${task.nome}\`, \`${task.descricao}\`, \`${task.tag.nome || ''}\`)" class="text-yellow-600">✏️</button>
+              <button onclick="deleteTask(${task.id})" class="text-red-500">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    window.onload = () => {
+      loadTags();
+      loadTasks();
+    };
+  </script>
+</body>
+</html>
