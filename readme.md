@@ -34,7 +34,7 @@ Este projeto foi desenvolvido como parte do desafio **"Criando a sua Primeira AP
 1. Clone este repositório ou baixe os arquivos manualmente:
 
 ```bash
-git clone https://github.com/seu-usuario/api-tarefas-go.git
+git clone https://github.com/gothout/GoTodo-desafio-dio
 cd api-tarefas-go
 ````
 
